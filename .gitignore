@@ -1,3 +1,13 @@
+# === 未使用的驱动（保留本地，不上传） ===
+Hardware/ir.c
+Hardware/ir.h
+Hardware/led.c
+Hardware/led.h
+Hardware/smg.c
+Hardware/smg.h
+SYSTEM/timer.c
+SYSTEM/timer.h
+
 # === 商家资料 ===
 课设资料/
 课设资料.zip
@@ -13,6 +23,7 @@
 
 # === Markdown 文档（不需要的说明/报告） ===
 *.md
+!README.md
 红外遥控使用说明.txt
 
 # === Keil MDK 编译产物 ===
