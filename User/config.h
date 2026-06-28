@@ -53,4 +53,37 @@
 // 启用后占用: P1.2~P1.7, Timer2
 #define ENABLE_MOTOR       1
 
+// ============================================================
+// 模式参数
+// ============================================================
+
+// ---------- AVD 避障参数 ----------
+#define AVD_SPEED_FAST      40    // 前进全速 35%
+#define AVD_SPEED_SLOW      30    // 前进慢速 25%
+#define AVD_SPEED_BACK      30    // 后退速度 25%
+#define AVD_SPEED_BAISE      5    // 右轮偏置补偿
+#define AVD_BACK_TICKS      20    // 倒车拍数 (20×10ms=200ms)
+#define AVD_TURN_TICKS      20    // 转弯拍数 (20×10ms=200ms)
+#define AVD_AVOID_MIN      100    // 避障距离下限 mm（10cm）
+#define AVD_AVOID_MAX      400    // 避障距离上限 mm（40cm）
+#define AVD_AVOID_STEP      50    // 避障距离步进 mm（5cm）
+#define AVD_SLOW_OFFSET    100    // 慢速触发偏移 (避障阈值+100mm)
+
+// ---------- DIST 定距巡航参数 ----------
+#define DIST_TARGET_MM     200    // 目标距离 mm（20cm）
+#define DIST_DEADZONE_MM    30    // 死区 mm（±1.5cm）
+#define DIST_SPEED_MAX      40    // 快速调速 40%
+#define DIST_SPEED_SLOW     30    // 慢速调速 30%
+#define DIST_NEAR_MM        60    // 快/慢速切换阈值 mm（6cm）
+#define DIST_SPEED_BAISE     3    // 右轮偏置补偿
+
+// ---------- BT 蓝牙控制参数 ----------
+#define BT_SPEED            40    // 蓝牙按键遥控速度
+
+// ---------- AVD 状态机枚举 ----------
+#define AVD_ST_FORWARD  0
+#define AVD_ST_BACK     1
+#define AVD_ST_TURN     2
+#define AVD_ST_ERROR    3
+
 #endif

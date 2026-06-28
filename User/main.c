@@ -9,12 +9,13 @@
  *    [CHECK 模式] 手动调速, K1+ K2-
  *    [AVD  模式] 超声波自动避障: 遇障碍→倒车→右转→前进
  *    [DIST 模式] 定距巡航: 目标20cm, 死区1cm
- *    [BT   模式] 蓝牙遥控 (预留)
+ *    [BT   模式] 蓝牙遥控
  *
  *  ==== 版本 ====
  *    2025-06  v2.1  DIST模式自动巡航
  *    2025-06  v2.2  引入 view_task + lcdprintf
  *    2025-06  v2.3  AVD避障模式 (替换红外遥控)
+ *    2025-06  v2.4  重构: 业务逻辑抽取为独立函数, 参数移至 config.h
  **********************************************************************/
 
 #include "SYSTEM/sys.h"
@@ -27,37 +28,6 @@
 #include "Hardware/bt.h"
 #include "User/config.h"
 
-// ---- DIST 模式参数 ----
-#define DIST_TARGET_MM     200
-#define DIST_DEADZONE_MM    30
-#define DIST_SPEED_MAX      40
-#define DIST_SPEED_SLOW     30
-#define DIST_NEAR_MM        60
-#define DIST_SPEED_BAISE    3
-
-
-
-// ---- AVD 避障参数 ----
-#define AVD_SPEED_FAST      40    // 前进全速 35%
-#define AVD_SPEED_SLOW      30    // 前进慢速 25% (距障碍<300mm)
-#define AVD_SPEED_BACK      30    // 后退慢速 25%
-#define AVD_SPEED_BAISE     5     //右轮要加的偏置速度
-//#define avoid_slow_mm    300   // 慢速触发距离mm
-#define AVD_BACK_TICKS      20    // 倒车拍数 (20×10ms=200ms)
-#define AVD_TURN_TICKS      20    // 转弯拍数 (30×10ms=300ms)
-#define AVD_AVOID_MIN       100   // 避障距离下限mm
-#define AVD_AVOID_MAX       400   // 避障距离上限mm
-#define AVD_AVOID_STEP      50   // 避障距离步进mm
-
-// ---- 蓝牙控制参数 ----
-#define BT_SPEED            40    // 蓝牙按键遥控速度
-
-// AVD 状态枚举
-#define AVD_ST_FORWARD  0
-#define AVD_ST_BACK     1
-#define AVD_ST_TURN     2
-#define AVD_ST_ERROR    3
-
 // AVD 显示用状态名
 static const char code *avd_state_names[] = {
     "FWD", "BACK", "TURN", "ERR"
@@ -66,6 +36,11 @@ static const char code *avd_state_names[] = {
 /* ========================================
  *  函数声明
  * ======================================== */
+static void avd_task(u16 dist_mm, u16 avoid_slow_mm, u16 avoid_mm);
+static void dist_task(u16 dist_mm);
+static void key_handler(KeyCode_t key, view_mode_e *mode, s8 *speed,
+                        u16 *avoid_mm, u16 *avoid_slow_mm);
+static void bt_handler(view_mode_e *mode, s8 *speed);
 static void view_task(view_mode_e mode, u16 dist_mm, s8 speed, u16 avoid_mm);
 
 /* ========================================
@@ -74,7 +49,7 @@ static void view_task(view_mode_e mode, u16 dist_mm, s8 speed, u16 avoid_mm);
  *  每 10ms 调用一次。
  *  FORWARD → 遇障 BACK → 倒完 TURN → 转完 FORWARD
  * ======================================== */
-static void avd_task(u16 dist_mm, u16 avoid_slow_mm ,u16 avoid_mm)
+static void avd_task(u16 dist_mm, u16 avoid_slow_mm, u16 avoid_mm)
 {
     static u8 state = AVD_ST_FORWARD;
     static u8 count = 0;
@@ -137,6 +112,188 @@ static void avd_task(u16 dist_mm, u16 avoid_slow_mm ,u16 avoid_mm)
 }
 
 /* ========================================
+ *  dist_task — DIST 定距巡航控制
+ *
+ *  比例控制: 距离偏大→前进, 偏小→后退
+ *  |diff|≥60mm 快速, <60mm 慢速, ±15mm 死区停车
+ * ======================================== */
+static void dist_task(u16 dist_mm)
+{
+    s16 diff;
+    s8  spd;
+
+    if (dist_mm == 0)
+    {
+        g_speed_left  = 0;
+        g_speed_right = 0;
+        return;
+    }
+
+    diff = (s16)dist_mm - DIST_TARGET_MM;
+
+    if      (diff > 0)  spd =  1;
+    else if (diff < 0)  spd = -1;
+    else                spd =  0;
+
+    if (spd != 0)
+    {
+        if (diff < 0) diff = -diff;
+        spd *= (diff < DIST_NEAR_MM) ? DIST_SPEED_SLOW : DIST_SPEED_MAX;
+    }
+
+    g_speed_left  = spd;
+    g_speed_right = spd + DIST_SPEED_BAISE;
+
+    // 死区检查: 距离已在目标 ±15mm 内则停车
+    if (dist_mm >= DIST_TARGET_MM - DIST_DEADZONE_MM / 2 &&
+        dist_mm <= DIST_TARGET_MM + DIST_DEADZONE_MM / 2)
+    {
+        g_speed_left  = 0;
+        g_speed_right = 0;
+    }
+}
+
+/* ========================================
+ *  key_handler — 按键事件分发
+ *
+ *  根据当前模式将 K1~K4 映射到不同动作。
+ *  mode/speed/avoid_mm/avoid_slow_mm 为 in/out 参数。
+ * ======================================== */
+static void key_handler(KeyCode_t key, view_mode_e *mode, s8 *speed,
+                        u16 *avoid_mm, u16 *avoid_slow_mm)
+{
+    switch (key)
+    {
+        case KEY_K1:
+            if (*mode == VIEW_MODE_MENU)
+            {
+                *mode = VIEW_MODE_CHECK;
+            }
+            else if (*mode == VIEW_MODE_CHECK)
+            {
+                // 加速
+                *speed += MOTOR_SPEED_STEP;
+                if (*speed > MOTOR_SPEED_MAX) *speed = MOTOR_SPEED_MAX;
+                g_speed_left  = *speed;
+                g_speed_right = *speed;
+            }
+            else if (*mode == VIEW_MODE_AVD)
+            {
+                // 增大避障阈值
+                *avoid_mm      += AVD_AVOID_STEP;
+                *avoid_slow_mm += AVD_AVOID_STEP;
+                if (*avoid_mm > AVD_AVOID_MAX) *avoid_mm = AVD_AVOID_MAX;
+            }
+            break;
+
+        case KEY_K2:
+            if (*mode == VIEW_MODE_MENU)
+            {
+                *mode = VIEW_MODE_AVD;
+            }
+            else if (*mode == VIEW_MODE_CHECK)
+            {
+                // 减速
+                *speed -= MOTOR_SPEED_STEP;
+                *avoid_slow_mm += AVD_AVOID_STEP;
+                if (*speed < -MOTOR_SPEED_MAX) *speed = -MOTOR_SPEED_MAX;
+                g_speed_left  = *speed;
+                g_speed_right = *speed;
+            }
+            else if (*mode == VIEW_MODE_AVD)
+            {
+                // 减小避障阈值
+                *avoid_mm -= AVD_AVOID_STEP;
+                if (*avoid_mm < AVD_AVOID_MIN) *avoid_mm = AVD_AVOID_MIN;
+            }
+            break;
+
+        case KEY_K3:
+            if (*mode == VIEW_MODE_MENU)
+            {
+                *mode = VIEW_MODE_DIST;
+            }
+            break;
+
+        case KEY_K4:
+            if (*mode == VIEW_MODE_MENU)
+            {
+                // 菜单下按 K4 → 进入蓝牙模式
+                *mode = VIEW_MODE_LANYA;
+                g_speed_left  = 0;
+                g_speed_right = 0;
+                *speed = 0;
+            }
+            else if (*mode != VIEW_MODE_LANYA)
+            {
+                // 其他模式(非蓝牙) → 返回菜单
+                *mode = VIEW_MODE_MENU;
+                *speed = 0;
+                g_speed_left  = 0;
+                g_speed_right = 0;
+            }
+            // 蓝牙模式下 K4 无效 (一次性不可关闭)
+            break;
+
+        default:
+            break;
+    }
+}
+
+/* ========================================
+ *  bt_handler — 蓝牙按键事件处理
+ *
+ *  仅在有新蓝牙事件时调用, is_down=1 按下 0 松开。
+ *  前进/后退/左转/右转为点动控制。
+ * ======================================== */
+static void bt_handler(view_mode_e *mode, s8 *speed)
+{
+    u8  bt_key;
+    u8  is_down;
+
+    if (!BT_GetKey(&bt_key, &is_down))
+        return;
+
+    if (is_down)
+    {
+        switch (bt_key)
+        {
+            case 1: *mode = VIEW_MODE_CHECK; break;
+            case 2: *mode = VIEW_MODE_AVD;   break;
+            case 3: *mode = VIEW_MODE_DIST;  break;
+            case 4:  // 前进
+                g_speed_left  =  BT_SPEED;
+                g_speed_right =  BT_SPEED;
+                break;
+            case 5:  // 停车 / 返回菜单
+                *mode = VIEW_MODE_MENU;
+                g_speed_left  = 0;
+                g_speed_right = 0;
+                *speed = 0;
+                break;
+            case 7:  // 后退
+                g_speed_left  = -BT_SPEED;
+                g_speed_right = -BT_SPEED;
+                break;
+            case 8:  // 原地左转
+                g_speed_left  =  BT_SPEED;
+                g_speed_right = -BT_SPEED;
+                break;
+            case 9:  // 原地右转
+                g_speed_left  = -BT_SPEED;
+                g_speed_right =  BT_SPEED;
+                break;
+            default: break;
+        }
+    }
+    else  // 松开 → 停止
+    {
+        g_speed_left  = 0;
+        g_speed_right = 0;
+    }
+}
+
+/* ========================================
  *  view_task — LCD 界面调度
  * ======================================== */
 static void view_task(view_mode_e mode, u16 dist_mm, s8 speed, u16 avoid_mm)
@@ -172,10 +329,12 @@ static void view_task(view_mode_e mode, u16 dist_mm, s8 speed, u16 avoid_mm)
 
         case VIEW_MODE_DIST:
             lcdprintf(0, 0, "T=%d.%u cm ",
-                      (int)(DIST_TARGET_MM / 10), (unsigned int)(DIST_TARGET_MM % 10));
+                      (int)(DIST_TARGET_MM / 10),
+                      (unsigned int)(DIST_TARGET_MM % 10));
             lcdprintf(0, 1, "D=%d.%u cm ",
                       (int)(dist_mm / 10), (unsigned int)(dist_mm % 10));
             break;
+
         case VIEW_MODE_LANYA:
             lcdprintf(0, 0, "L=%d R=%d       ",
                       (int)g_speed_left, (int)g_speed_right);
@@ -195,11 +354,8 @@ void main(void)
     KeyCode_t   key;
     s8          speed     = 0;
     u16         dist_mm   = 0;
-    
-    
-    //AVG模式下
-    u16         avoid_mm  = 200;         // 默认避障 20cm
-    u16         avoid_slow_mm  = 400;    // 慢速触发距离 300cm
+    u16         avoid_mm  = 200;      // 默认避障 20cm
+    u16         avoid_slow_mm = 400;  // 慢速触发距离 40cm
     view_mode_e view_mode = VIEW_MODE_MENU;
 
     Sys_Init();
@@ -218,190 +374,34 @@ void main(void)
     {
         Beep_Off();
 
-        /* ---- 0. 蓝牙帧解析 ---- */
-        BT_Poll();
-
         /* ---- 1. 传感器 ---- */
+        BT_Poll();
         SR04_Poll();
         dist_mm = SR04_GetFiltered();
 
-        /* ---- 2. 按键 ---- */
+        /* ---- 2. 实体按键 ---- */
         key = Key_Scan();
         if (key != KEY_NONE)
         {
             Beep_On();
-
-            switch (key)
-            {
-                case KEY_K1:
-                    if (view_mode == VIEW_MODE_MENU)
-                    {
-                        view_mode = VIEW_MODE_CHECK;
-                    }
-                    else if (view_mode == VIEW_MODE_CHECK)
-                    {
-                        speed += MOTOR_SPEED_STEP;
-                        if (speed > MOTOR_SPEED_MAX) speed = MOTOR_SPEED_MAX;
-                        g_speed_left  = speed;
-                        g_speed_right = speed;
-                    }
-                    else if (view_mode == VIEW_MODE_AVD)
-                    {
-                        avoid_mm += AVD_AVOID_STEP;
-                        avoid_slow_mm += AVD_AVOID_STEP;
-                        if (avoid_mm > AVD_AVOID_MAX) avoid_mm = AVD_AVOID_MAX;
-                    }
-                    break;
-
-                case KEY_K2:
-                    if (view_mode == VIEW_MODE_MENU)
-                    {
-                        view_mode = VIEW_MODE_AVD;
-                    }
-                    else if (view_mode == VIEW_MODE_CHECK)
-                    {
-                        speed -= MOTOR_SPEED_STEP;
-                        avoid_slow_mm += AVD_AVOID_STEP;
-                        if (speed < -MOTOR_SPEED_MAX) speed = -MOTOR_SPEED_MAX;
-                        g_speed_left  = speed;
-                        g_speed_right = speed;
-                    }
-                    else if (view_mode == VIEW_MODE_AVD)
-                    {
-                        avoid_mm -= AVD_AVOID_STEP;
-                        if (avoid_mm < AVD_AVOID_MIN) avoid_mm = AVD_AVOID_MIN;
-                    }
-                    break;
-
-                case KEY_K3:
-                    if (view_mode == VIEW_MODE_MENU)
-                    {
-                        view_mode = VIEW_MODE_DIST;
-                    }
-                    break;
-
-                case KEY_K4:
-                    if (view_mode == VIEW_MODE_MENU)
-                    {
-                        // 菜单下按 K4 → 进入蓝牙模式
-                        view_mode = VIEW_MODE_LANYA;
-                        g_speed_left  = 0;
-                        g_speed_right = 0;
-                        speed = 0;
-                    }
-                    else if (view_mode != VIEW_MODE_LANYA)
-                    {
-                        // 其他模式(非蓝牙) → 返回菜单
-                        view_mode = VIEW_MODE_MENU;
-                        speed = 0;
-                        g_speed_left  = 0;
-                        g_speed_right = 0;
-                    }
-                    // 蓝牙模式下 K4 无效 (一次性不可关闭)
-                    break;
-
-                default:
-                    break;
-            }
+            key_handler(key, &view_mode, &speed, &avoid_mm, &avoid_slow_mm);
         }
 
-        /* ---- 3. 蓝牙按键 (LANYA 模式) ---- */
-        {
-            u8  bt_key;
-            u8  is_down;
+        /* ---- 3. 蓝牙按键 ---- */
+        bt_handler(&view_mode, &speed);
 
-            if (BT_GetKey(&bt_key, &is_down))
-            {
-                // 按下 → 执行动作, 松开 → 停止
-                if (is_down)
-                {
-                    switch (bt_key)
-                    {
-                        case 1: view_mode = VIEW_MODE_CHECK; break;
-                        case 2: view_mode = VIEW_MODE_AVD;   break;
-                        case 3: view_mode = VIEW_MODE_DIST;  break;
-                        case 4:  // 前进
-                            g_speed_left  =  BT_SPEED;
-                            g_speed_right =  BT_SPEED;
-                            break;
-                        case 5:
-                            view_mode = VIEW_MODE_MENU;
-                            g_speed_left  = 0;
-                            g_speed_right = 0;
-                            speed = 0;
-                            break;
-                        case 7:  // 后退
-                            g_speed_left  = -BT_SPEED;
-                            g_speed_right = -BT_SPEED;
-                            break;
-                        case 8:  // 原地左转
-                            g_speed_left  =  BT_SPEED;
-                            g_speed_right = -BT_SPEED;
-                            break;
-                        case 9:  // 原地右转
-                            g_speed_left  = -BT_SPEED;
-                            g_speed_right =  BT_SPEED;
-                            break;
-                        default: break;
-                    }
-                }
-                else  // 松开 → 停止
-                {
-                    g_speed_left  = 0;
-                    g_speed_right = 0;
-                }
-            }
-        }
-
-        /* ---- 4. AVD 避障 ---- */
+        /* ---- 4. AVD 避障状态机 ---- */
         if (view_mode == VIEW_MODE_AVD)
-        {
-            avd_task(dist_mm, avoid_slow_mm,avoid_mm);
-        }
+            avd_task(dist_mm, avoid_slow_mm, avoid_mm);
 
-        /* ---- 4. DIST 模式: 自动巡航 ---- */
+        /* ---- 5. DIST 定距巡航 ---- */
         if (view_mode == VIEW_MODE_DIST)
-        {
-            if (dist_mm != 0)
-            {
-                s16 diff   = (s16)dist_mm - DIST_TARGET_MM;
-                s8  spd;
+            dist_task(dist_mm);
 
-                if      (diff > 0)  spd =  1;
-                else if (diff < 0)  spd = -1;
-                else                spd =  0;
-
-                if (spd != 0)
-                {
-                    if (diff < 0) diff = -diff;
-                    if (diff < DIST_NEAR_MM)
-                        spd *= DIST_SPEED_SLOW;
-                    else
-                        spd *= DIST_SPEED_MAX;
-                }
-
-                g_speed_left  = spd;
-                g_speed_right = spd + DIST_SPEED_BAISE;
-
-                if (dist_mm >= DIST_TARGET_MM - DIST_DEADZONE_MM/2 &&
-                    dist_mm <= DIST_TARGET_MM + DIST_DEADZONE_MM/2)
-                {
-                    g_speed_left  = 0;
-                    g_speed_right = 0;
-                }
-            }
-            else
-            {
-                g_speed_left  = 0;
-                g_speed_right = 0;
-            }
-        }
-
-        /* ---- 5. LCD 界面 ---- */
+        /* ---- 6. LCD 界面 ---- */
         view_task(view_mode, dist_mm, speed, avoid_mm);
 
-        
-        /* ---- 6. 电机 ---- */
+        /* ---- 7. 电机 PWM 输出 ---- */
         Motor_Apply();
 
         delay_ms(10);
