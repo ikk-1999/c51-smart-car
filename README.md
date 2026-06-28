@@ -39,4 +39,4 @@
 
 ## 仿真
 
-在 `课设仿真/poteusProject/` 下打开 `led.pdsprj` 即可运行 Proteus 仿真。
+在 `课设仿真/poteusProject/` 下打开 `project.pdsprj` 即可运行 Proteus 仿真。
