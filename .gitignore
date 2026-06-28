@@ -1,0 +1,47 @@
+# === 商家资料 ===
+课设资料/
+课设资料.zip
+
+# === 课设图片 ===
+课设图片/
+
+# === Word 文档（给老师的报告） ===
+*.docx
+*.doc
+~$*.docx
+~$*.doc
+
+# === Markdown 文档（不需要的说明/报告） ===
+*.md
+红外遥控使用说明.txt
+
+# === Keil MDK 编译产物 ===
+Objects/
+Listings/
+*.OBJ
+*.LST
+*.M51
+*.Mp
+*.plg
+*.uvopt
+*.uvgui.*
+*.dep
+*.bak
+JLinkLog.txt
+*.iex
+
+# === Claude Code ===
+.claude/
+
+# === IDE / 编辑器 ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === 系统临时文件 ===
+Desktop.ini
+Thumbs.db
+.DS_Store
+*.tmp
