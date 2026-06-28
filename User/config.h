@@ -22,7 +22,7 @@
 #define KEY_DEBOUNCE_MS   20
 
 // ---------- 计数器上限 ----------
-// 计数器显示范围 0~COUNT_MAX，红外数字键可递增
+// 计数器显示范围 0~COUNT_MAX
 #define COUNT_MAX         99
 
 // ---------- 红外遥控 (已由 AVD 避障替代) ----------
@@ -67,7 +67,6 @@
 #define AVD_AVOID_MIN      100    // 避障距离下限 mm（10cm）
 #define AVD_AVOID_MAX      400    // 避障距离上限 mm（40cm）
 #define AVD_AVOID_STEP      50    // 避障距离步进 mm（5cm）
-#define AVD_SLOW_OFFSET    100    // 慢速触发偏移 (避障阈值+100mm)
 
 // ---------- DIST 定距巡航参数 ----------
 #define DIST_TARGET_MM     200    // 目标距离 mm（20cm）

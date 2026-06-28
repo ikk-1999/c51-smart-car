@@ -21,7 +21,7 @@
 //   dist = SR04_GetFiltered();  // 取 3 次滑动平均 (mm)
 // ============================================================
 
-#define SR04_WIN_SIZE      2    // 滑动平均窗口 (采样3次)
+#define SR04_WIN_SIZE      2    // 滑动平均窗口 (2 次采样)
 #define SR04_TICK_PERIOD   2    // 采样间隔: 2 × ~10ms = ~20ms
 
 void SR04_Init(void);

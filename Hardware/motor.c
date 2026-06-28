@@ -57,11 +57,11 @@ void Motor_Apply(void)
     // ---- 右轮 ----
     s = g_speed_right;
     duty_right = (s >= 0) ? (u8)s : (u8)(-s);
-    if (s > 0)           // 前进: I3=1 IN4=0
+    if (s > 0)           // 前进: IN1=0,IN2=1
     {
         IN1_M = 0; IN2_M = 1;
     }
-    else if (s < 0)      // 后退: IN1=1 IN2=0
+    else if (s < 0)      // 后退: IN1=1,IN2=0
     {
         IN1_M = 1; IN2_M = 0;
     }
@@ -73,7 +73,7 @@ void Motor_Apply(void)
     // ---- 左轮 (极性与右轮相反!) ----
     s = g_speed_left;
     duty_left = (s >= 0) ? (u8)s : (u8)(-s);
-    if (s > 0)           // 前进: IN1=1 IN2=0
+    if (s > 0)           // 前进: IN3=1,IN4=0
     {
         IN3_M = 1; IN4_M = 0;
     }
