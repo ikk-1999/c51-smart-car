@@ -14,7 +14,7 @@
 //   LCD_Init();
 //   LCD_Clear();
 //   LCD_WriteString(0, 0, "Dist: 12.3 cm");
-//   LCD_WriteString(0, 1, "IR:5  Count:56");
+//   LCD_WriteString(0, 1, "Spd: +50      ");
 // ============================================================
 
 #define LCD_LINE1  0
@@ -40,8 +40,8 @@ void lcd_get_cursor(u8 *x, u8 *y);
 // 控制符: %Px,y(光标跳到(x,y),不消耗参数)
 //
 // 用法:
-//   lcdprintf(0, 0, "dis=%d.%u cm", cm, frac);
-//   lcdprintf(0, 1, "ir=0x%X  spd=%d", ir, spd);
+//   lcdprintf(0, 0, "D=%d.%u cm", cm, frac);
+//   lcdprintf(0, 1, "L=%d R=%d", left, right);
 void lcdprintf(u8 x, u8 y, const char *fmt, ...);
 
 #endif

@@ -1,5 +1,7 @@
-// view.c — 已废弃，main.c 直接使用 LCD_Printf
-// 保留此文件但禁用编译以释放 DATA 空间
+// view.c — 已废弃 (v2.3+)
+// 原独立显示模块，通过 View_SetData/View_Refresh 刷新 LCD。
+// 现已被 main.c 中的 static view_task() 替代，直接调用 lcdprintf。
+// 保留此文件但禁用编译以释放 DATA 空间。
 #if 0
 
 #include "Hardware/lcd1602.h"

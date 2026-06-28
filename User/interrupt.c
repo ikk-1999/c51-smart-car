@@ -5,7 +5,7 @@
 //
 // 中断向量表 (C51)：
 //   interrupt 0 = INT0 (P3.2) — 保留
-//   interrupt 1 = Timer0     — 超声波超时保护 (ex Timer1)
+//   interrupt 1 = Timer0     — 超声波超时保护 (v2.3起由 Timer1 改为 Timer0)
 //   interrupt 2 = INT1 (P3.3) — 保留
 //   interrupt 3 = Timer1     — 保留 (UART 波特率, 不产生中断)
 //   interrupt 4 = UART       — 蓝牙串口接收

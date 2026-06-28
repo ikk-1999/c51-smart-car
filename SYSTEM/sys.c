@@ -10,7 +10,7 @@
 //   3. SCON=0x00 — 清串口控制寄存器（波特率、中断等）
 //
 // 没做什么（故意留给各模块自己做）：
-//   - 不配 TMOD → ir.c 初始化时设 Timer0 模式2, hc_sr04.c 初始化时设 Timer1 模式1
+//   - 不配 TMOD → hc_sr04.c 设 Timer0 模式1, bt.c 设 Timer1 模式2, motor.c 设 Timer2
 //   - 不配定时器重装值 → 各驱动自行设定
 //   - 不开任何中断 → 所有硬件模块初始化完后 main() 才调 INT_ENABLE_GLOBAL()
 //
