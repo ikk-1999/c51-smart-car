@@ -1,6 +1,6 @@
 # C51 智能小车
 
-基于 STC89C52 单片机的智能小车，具备自动避障、定距跟随和蓝牙遥控功能。
+基于 STC89C52RC 单片机的智能小车，具备自动避障、定距跟随和蓝牙遥控功能。
 
 ## 硬件平台
 
@@ -39,10 +39,12 @@
 ## 开发环境
 
 - **IDE**: Keil MDK (C51)
-- **MCU**: STC89C52
+- **MCU**: STC89C52RC
 - **仿真**: Proteus
 - **语言**: C
 
 ## 仿真
 
 在 `课设仿真/poteusProject/` 下打开 `project.pdsprj` 即可运行 Proteus 仿真。
+
+![Proteus 仿真电路](课设图片/Proteus完整仿真电路图.jpg)
